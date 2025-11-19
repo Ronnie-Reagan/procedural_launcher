@@ -79,6 +79,24 @@
         sfxVolume: 'launcher_sfx_volume',
     };
 
+    const assistPreferenceKeys = {
+        trajectory: 'launcher_assist_trajectory',
+        superEasy: 'launcher_super_easy_mode',
+        streakShield: 'launcher_streak_shield',
+        cheatsUnlocked: 'launcher_cheats_unlocked',
+    };
+
+    const TRAINING_WHEEL_CAP = 5;
+    const CHEAT_CODE = 'orbit';
+
+    const readBooleanPref = (key, fallback = false) => {
+        const stored = storage.get(key);
+        if (stored === null) {
+            return fallback;
+        }
+        return stored !== '0';
+    };
+
     const readVolumePref = (key, fallback) => {
         const stored = storage.get(key);
         const parsed = Number(stored);
@@ -87,6 +105,10 @@
         }
         return fallback;
     };
+
+    const storedBest = Number(storage.get(persistenceKeys.best)) || 0;
+    const storedLifetime = Number(storage.get(persistenceKeys.lifetime)) || 0;
+    const defaultTrajectory = readBooleanPref(assistPreferenceKeys.trajectory, storedBest < TRAINING_WHEEL_CAP);
 
     const calmingTrackFiles = [
         '01 Kevin MacLeod - Carefree.mp3',
@@ -139,8 +161,8 @@
         MIN_BOUNCE: 0.15,
 
         score: 0,
-        best: Number(storage.get(persistenceKeys.best)) || 0,
-        lifetime: Number(storage.get(persistenceKeys.lifetime)) || 0,
+        best: storedBest,
+        lifetime: storedLifetime,
         paused: false,
         lastTime: performance.now(),
         statusTimer: 0,
@@ -189,6 +211,12 @@
             currentTrackIndex: -1,
             nowPlayingTimer: 0,
             noiseBuffer: null,
+        },
+        assists: {
+            showTrajectory: defaultTrajectory,
+            superEasyMode: readBooleanPref(assistPreferenceKeys.superEasy, false),
+            streakShield: readBooleanPref(assistPreferenceKeys.streakShield, false),
+            cheatsUnlocked: readBooleanPref(assistPreferenceKeys.cheatsUnlocked, false),
         },
     };
 
@@ -333,7 +361,7 @@
         pointerEvents: 'none',
         backdropFilter: 'blur(6px)',
     });
-    instructions.textContent = 'Press, pull, and release the orb like an elastic. Press R to reset or Pause for settings.';
+    instructions.textContent = 'Press, pull, and release the orb like an elastic. Press R to reset or Pause for settings + training wheels.';
     root.appendChild(instructions);
 
     const statusBadge = doc.createElement('div');
@@ -548,6 +576,18 @@
     });
     settingsContent.appendChild(dataSection);
 
+    const assistsSection = doc.createElement('div');
+    Object.assign(assistsSection.style, {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.65rem',
+        padding: '1rem',
+        borderRadius: '0.85rem',
+        background: 'rgba(24, 35, 66, 0.72)',
+        border: '1px solid rgba(96,165,250,0.2)'
+    });
+    settingsContent.appendChild(assistsSection);
+
     const homeScreenSection = doc.createElement('div');
     Object.assign(homeScreenSection.style, {
         display: 'flex',
@@ -655,6 +695,63 @@
         clearTimeout(resetConfirmationTimer);
         resetAllStats();
     });
+
+    assistsSection.appendChild(createSectionTitle('Training Wheels & Cheats'));
+    const assistsBlurb = doc.createElement('p');
+    assistsBlurb.textContent = 'Optional helpers for practicing or chill modes. They unlock for new runs or with a cheat code.';
+    Object.assign(assistsBlurb.style, {
+        margin: '0',
+        fontSize: '0.85rem',
+        color: 'rgba(191, 219, 254, 0.85)',
+    });
+    assistsSection.appendChild(assistsBlurb);
+
+    const assistsStatus = doc.createElement('p');
+    Object.assign(assistsStatus.style, {
+        margin: '0',
+        fontSize: '0.82rem',
+        color: 'rgba(148, 187, 255, 0.9)',
+    });
+    assistsSection.appendChild(assistsStatus);
+
+    const assistButtonGrid = doc.createElement('div');
+    Object.assign(assistButtonGrid.style, {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+        gap: '0.65rem',
+    });
+    assistsSection.appendChild(assistButtonGrid);
+
+    const trajectoryToggleButton = createMenuButton(assistButtonGrid, '');
+    const superEasyToggleButton = createMenuButton(assistButtonGrid, '');
+    const streakShieldToggleButton = createMenuButton(assistButtonGrid, '');
+
+    const cheatRow = doc.createElement('div');
+    Object.assign(cheatRow.style, {
+        display: 'flex',
+        gap: '0.5rem',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    });
+    assistsSection.appendChild(cheatRow);
+
+    const cheatInput = doc.createElement('input');
+    cheatInput.type = 'text';
+    Object.assign(cheatInput.style, {
+        flex: '1',
+        minWidth: '160px',
+        padding: '0.65rem 0.8rem',
+        borderRadius: '0.65rem',
+        border: '1px solid rgba(255,255,255,0.18)',
+        background: 'rgba(15, 23, 42, 0.85)',
+        color: '#fff',
+        fontSize: '0.9rem',
+    });
+    cheatInput.placeholder = 'Enter cheat code (hint: orbit)';
+    cheatRow.appendChild(cheatInput);
+
+    const cheatButton = createMenuButton(cheatRow, 'Apply Code');
+    cheatButton.style.padding = '0.65rem 0.9rem';
 
     homeScreenSection.appendChild(createSectionTitle('Add to Home Screen'));
     const homeDescription = doc.createElement('p');
@@ -1176,6 +1273,98 @@
         button.style.borderColor = active ? 'rgba(148, 187, 255, 0.85)' : 'rgba(255,255,255,0.12)';
     };
 
+    const assistsUnlocked = () => state.best < TRAINING_WHEEL_CAP || state.assists.cheatsUnlocked;
+
+    const persistAssistFlag = (key, value) => {
+        storage.set(key, value ? '1' : '0');
+    };
+
+    const setTrajectoryAssist = (enabled) => {
+        state.assists.showTrajectory = enabled && assistsUnlocked();
+        persistAssistFlag(assistPreferenceKeys.trajectory, state.assists.showTrajectory);
+    };
+
+    const setSuperEasyMode = (enabled) => {
+        state.assists.superEasyMode = enabled && assistsUnlocked();
+        persistAssistFlag(assistPreferenceKeys.superEasy, state.assists.superEasyMode);
+        randomizeBucket();
+    };
+
+    const setStreakShield = (enabled) => {
+        state.assists.streakShield = enabled && assistsUnlocked();
+        persistAssistFlag(assistPreferenceKeys.streakShield, state.assists.streakShield);
+    };
+
+    const enforceAssistLock = (silent = false) => {
+        if (assistsUnlocked()) {
+            return;
+        }
+        if (state.assists.showTrajectory || state.assists.superEasyMode || state.assists.streakShield) {
+            state.assists.showTrajectory = false;
+            state.assists.superEasyMode = false;
+            state.assists.streakShield = false;
+            persistAssistFlag(assistPreferenceKeys.trajectory, false);
+            persistAssistFlag(assistPreferenceKeys.superEasy, false);
+            persistAssistFlag(assistPreferenceKeys.streakShield, false);
+            if (!silent) {
+                setStatus('Training wheels tucked away after your streak.', 1800);
+            }
+            if (state.groundY > 0) {
+                randomizeBucket();
+            }
+        }
+    };
+
+    const updateAssistButtons = () => {
+        const unlocked = assistsUnlocked();
+        if (state.assists.cheatsUnlocked && state.best >= TRAINING_WHEEL_CAP) {
+            assistsStatus.textContent = 'Cheats unlocked — helpers stay available beyond the streak cap.';
+        } else if (unlocked) {
+            assistsStatus.textContent = `Available while under streak ${TRAINING_WHEEL_CAP}. Use them freely or practice till you beat it.`;
+        } else {
+            assistsStatus.textContent = `Locked (you cleared streak ${TRAINING_WHEEL_CAP}). Enter the cheat code to reopen them.`;
+        }
+
+        const applyAvailability = (button) => {
+            button.disabled = !unlocked;
+            button.style.opacity = unlocked ? '1' : '0.55';
+            button.style.cursor = unlocked ? 'pointer' : 'not-allowed';
+        };
+
+        applyAvailability(trajectoryToggleButton);
+        applyAvailability(superEasyToggleButton);
+        applyAvailability(streakShieldToggleButton);
+
+        trajectoryToggleButton.textContent = `Trajectory Preview: ${state.assists.showTrajectory ? 'On' : 'Off'}`;
+        superEasyToggleButton.textContent = `Super Easy Mode: ${state.assists.superEasyMode ? 'On' : 'Off'}`;
+        streakShieldToggleButton.textContent = `Streak Shield: ${state.assists.streakShield ? 'On' : 'Off'}`;
+
+        styleToggleButton(trajectoryToggleButton, unlocked && state.assists.showTrajectory);
+        styleToggleButton(superEasyToggleButton, unlocked && state.assists.superEasyMode);
+        styleToggleButton(streakShieldToggleButton, unlocked && state.assists.streakShield);
+
+        if (state.assists.cheatsUnlocked && state.best < TRAINING_WHEEL_CAP) {
+            assistsStatus.textContent += ' Cheats unlocked.';
+        }
+    };
+
+    const applyCheatCode = () => {
+        if (state.assists.cheatsUnlocked) {
+            setStatus('Cheats already unlocked.', 1200);
+            updateAssistButtons();
+            return;
+        }
+        const code = cheatInput.value.trim().toLowerCase();
+        if (code && code === CHEAT_CODE) {
+            state.assists.cheatsUnlocked = true;
+            persistAssistFlag(assistPreferenceKeys.cheatsUnlocked, true);
+            setStatus('Cheat code accepted. Training wheels stay open.', 2000);
+            updateAssistButtons();
+        } else {
+            setStatus('Code not recognized.', 1400);
+        }
+    };
+
     const resumeButton = createMenuButton(pauseButtonColumn, 'Resume Play');
     resumeButton.style.background = 'rgba(16, 185, 129, 0.85)';
     resumeButton.style.borderColor = 'rgba(110, 231, 183, 0.85)';
@@ -1210,6 +1399,55 @@
 
     const settingsBackButton = createMenuButton(settingsFooter, 'Back to Pause Menu');
 
+    const ensureAssistAccess = () => {
+        if (assistsUnlocked()) {
+            return true;
+        }
+        setStatus(`Helpers lock once you beat streak ${TRAINING_WHEEL_CAP}. Enter the code to reopen them.`, 2000);
+        updateAssistButtons();
+        return false;
+    };
+
+    trajectoryToggleButton.addEventListener('click', () => {
+        if (!ensureAssistAccess()) {
+            return;
+        }
+        setTrajectoryAssist(!state.assists.showTrajectory);
+        updateAssistButtons();
+        setStatus(state.assists.showTrajectory ? 'Trajectory preview on' : 'Trajectory preview off', 1200);
+    });
+
+    superEasyToggleButton.addEventListener('click', () => {
+        if (!ensureAssistAccess()) {
+            return;
+        }
+        setSuperEasyMode(!state.assists.superEasyMode);
+        updateAssistButtons();
+        setStatus(state.assists.superEasyMode ? 'Super easy mode on' : 'Super easy mode off', 1200);
+    });
+
+    streakShieldToggleButton.addEventListener('click', () => {
+        if (!ensureAssistAccess()) {
+            return;
+        }
+        setStreakShield(!state.assists.streakShield);
+        updateAssistButtons();
+        setStatus(state.assists.streakShield ? 'Streak shield armed' : 'Streak shield disarmed', 1200);
+    });
+
+    cheatButton.addEventListener('click', () => {
+        applyCheatCode();
+        updateAssistButtons();
+    });
+
+    cheatInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            applyCheatCode();
+            updateAssistButtons();
+        }
+    });
+
     const openSettingsView = (focusElement = null) => {
         showOverlayView('settings');
         if (focusElement) {
@@ -1236,6 +1474,7 @@
 
     updateMusicToggleButton();
     updateSfxToggleButton();
+    updateAssistButtons();
 
     const updateAddToHomeButtonLabel = () => {
         if (isStandalone) {
@@ -1376,23 +1615,38 @@
     };
 
     const randomizeBucket = () => {
-        const minWidth = Math.max(70, state.width * 0.08);
-        const maxWidth = Math.max(minWidth + 40, state.width * 0.2);
-        state.bucket.width = randomRange(minWidth, maxWidth);
-        state.bucket.depth = randomRange(Math.max(70, state.height * 0.14), Math.max(110, state.height * 0.22));
-        state.bucket.wall = clamp(state.bucket.width * randomRange(0.12, 0.2), 10, 26);
+        const assistScale = state.assists.superEasyMode ? 1.35 : 1;
+        const depthScale = state.assists.superEasyMode ? 1.18 : 1;
+        const wallBoost = state.assists.superEasyMode ? 1.15 : 1;
 
-        const maxX = state.width - state.bucket.width - 40;
-        state.bucket.x = randomRange(state.width * 0.45, Math.max(state.width * 0.5, maxX));
+        const minWidth = Math.max(70, state.width * 0.08) * assistScale;
+        const maxWidth = Math.max(minWidth + 40, state.width * 0.2) * assistScale;
+        state.bucket.width = randomRange(minWidth, maxWidth);
+        state.bucket.depth = randomRange(Math.max(70, state.height * 0.14), Math.max(110, state.height * 0.22)) * depthScale;
+        state.bucket.wall = clamp(state.bucket.width * randomRange(0.12, 0.2) * wallBoost, 10, 32);
+
+        const maxX = Math.max(20, state.width - state.bucket.width - 40);
+        const assistMinX = state.assists.superEasyMode ? state.width * 0.32 : state.width * 0.45;
+        const assistMaxX = state.assists.superEasyMode ? Math.min(maxX, state.width * 0.72) : Math.max(state.width * 0.5, maxX);
+        const minX = clamp(assistMinX, 10, maxX);
+        const maxRangeX = Math.max(minX + 20, assistMaxX);
+        state.bucket.x = randomRange(minX, maxRangeX);
         const topMin = Math.max(40, state.height * 0.1);
         const topLimit = Math.min(state.groundY - state.bucket.depth - 40, state.height * 0.65);
         const bucketMaxY = Math.max(topMin + 20, topLimit);
         state.bucket.y = randomRange(topMin, bucketMaxY);
 
         const hue = randomRange(150, 260);
-        state.bucket.color = `hsla(${hue}, 78%, 55%, 0.5)`;
-        state.bucket.rim = `hsl(${hue}, 90%, 70%)`;
+        const bucketLightness = state.assists.superEasyMode ? 64 : 55;
+        const bucketAlpha = state.assists.superEasyMode ? 0.6 : 0.5;
+        state.bucket.color = `hsla(${hue}, 78%, ${bucketLightness}%, ${bucketAlpha})`;
+        state.bucket.rim = state.assists.superEasyMode
+            ? `hsl(${hue}, 94%, 78%)`
+            : `hsl(${hue}, 90%, 70%)`;
     };
+
+    enforceAssistLock(true);
+    updateAssistButtons();
 
     // --- Bucket colliders: treat walls as thick line segments ---
     function getBucketColliders() {
@@ -1525,6 +1779,30 @@
 
     const getMaxDragDistance = () => state.height - state.groundY - state.ball.radius;
 
+    const computeLaunchVelocity = () => {
+        const anchorX = state.launchOrigin.x;
+        const anchorY = state.launchOrigin.y;
+        const dx = anchorX - state.ball.x;
+        const dy = anchorY - state.ball.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance < 6) {
+            return null;
+        }
+
+        const maxDrag = getMaxDragDistance();
+        const strength = clamp(distance / maxDrag, 0, 1);
+        const maxSpeed = Math.max(state.width, state.height) * 0.04 + 4;
+        const speed = strength * maxSpeed;
+
+        const inv = 1 / distance;
+        return {
+            vx: dx * inv * speed,
+            vy: dy * inv * speed,
+            speed
+        };
+    };
+
     const updateDraggedBallPosition = (x, y) => {
         const anchorX = state.launchOrigin.x;
         const anchorY = state.launchOrigin.y;
@@ -1593,22 +1871,13 @@
     });
 
     const launchBall = () => {
-        const anchorX = state.launchOrigin.x;
-        const anchorY = state.launchOrigin.y;
-        const dx = anchorX - state.ball.x;
-        const dy = anchorY - state.ball.y;
-        const distance = Math.hypot(dx, dy);
-        if (distance < 6) {
+        const launch = computeLaunchVelocity();
+        if (!launch) {
             setStatus('Pull back further', 800);
             return false;
         }
-        const maxDrag = getMaxDragDistance();
-        const strength = clamp(distance / maxDrag, 0, 1);
-        const maxSpeed = Math.max(state.width, state.height) * 0.04 + 4;
-        const speed = strength * maxSpeed;
-        const inv = 1 / distance;
-        state.ball.vx = dx * inv * speed;
-        state.ball.vy = dy * inv * speed;
+        state.ball.vx = launch.vx;
+        state.ball.vy = launch.vy;
         state.ball.launched = true;
         state.ball.ready = false;
         state.ball.trail = [];
@@ -1672,6 +1941,8 @@
             }
             storage.set(persistenceKeys.lifetime, String(state.lifetime));
             updateScoreboard();
+            enforceAssistLock(true);
+            updateAssistButtons();
             playSuccessSound();
             spawnSparkles(
                 state.bucket.x + state.bucket.width / 2,
@@ -1684,6 +1955,12 @@
             randomizeBucket();
             rebuildBackdrop();
         } else {
+            if (state.assists.streakShield && assistsUnlocked()) {
+                addFloatingText('Shielded', state.ball.x, state.ball.y, '#b2f5ff');
+                setStatus('Miss ignored — streak shield is on', 1200);
+                repositionBall();
+                return;
+            }
             if (state.score !== 0) {
                 addFloatingText('Streak reset', state.ball.x, state.ball.y, '#ffb3c1');
             }
@@ -1851,10 +2128,12 @@
             const b = state.bucket;
             const r = ball.radius;
 
-            const innerLeft = b.x + b.wall * 0.6 + r * 0.4;
-            const innerRight = b.x + b.width - b.wall * 0.6 - r * 0.4;
-            const innerTop = b.y + b.wall + r * 0.3;
-            const innerBottomGoal = b.y + b.depth - b.wall - r * 0.8;
+            const forgiveness = state.assists.superEasyMode ? Math.max(12, r * 0.8) : 0;
+
+            const innerLeft = b.x + b.wall * 0.6 + r * 0.4 - forgiveness;
+            const innerRight = b.x + b.width - b.wall * 0.6 - r * 0.4 + forgiveness;
+            const innerTop = b.y + b.wall + r * 0.3 - forgiveness * 0.35;
+            const innerBottomGoal = b.y + b.depth - b.wall - r * 0.8 + forgiveness * 0.8;
 
             const inX = ball.x > innerLeft && ball.x < innerRight;
             const inY = ball.y > innerTop && ball.y < innerBottomGoal;
@@ -1862,6 +2141,15 @@
             if (ball.vy > 0 && inX && inY) {
                 finishAttempt(true);
                 return;
+            }
+
+            if (state.assists.superEasyMode && ball.vy > 0 && inX) {
+                const centerY = b.y + b.depth * 0.55;
+                const nearBottom = ball.y > centerY && ball.y < b.y + b.depth + forgiveness * 0.4;
+                if (nearBottom) {
+                    finishAttempt(true);
+                    return;
+                }
             }
 
 
@@ -2020,6 +2308,129 @@
         ctx.restore();
     };
 
+    const drawTrajectoryPreview = () => {
+        if (!state.assists.showTrajectory || !assistsUnlocked()) {
+            return;
+        }
+        if (!state.pointer.active || !state.ball.ready || state.ball.launched) {
+            return;
+        }
+
+        const launch = computeLaunchVelocity();
+        if (!launch) {
+            return;
+        }
+
+        const ball = state.ball;
+        const ground = state.groundY;
+
+        const simBall = {
+            x: state.launchOrigin.x,
+            y: ground - ball.radius - 1,
+            vx: launch.vx,
+            vy: launch.vy,
+            radius: ball.radius,
+        };
+
+        const bucketColliders = getBucketColliders();
+        const points = [];
+        const steps = 200;
+        const dt = 1;
+        const dragFactor = Math.pow(state.airDrag, dt);
+
+        for (let i = 0; i < steps; i++) {
+            simBall.vy += state.gravity * dt;
+            simBall.x += simBall.vx * dt;
+            simBall.y += simBall.vy * dt;
+
+            if (simBall.y + simBall.radius >= ground) {
+                const impact = Math.abs(simBall.vy);
+                simBall.y = ground - simBall.radius;
+
+                if (impact < state.MIN_BOUNCE * 0.9) {
+                    simBall.vy = 0;
+                    simBall.vx *= 0.7;
+                    points.push({ x: simBall.x, y: simBall.y });
+                    break;
+                }
+
+                simBall.vy = -simBall.vy * state.REST;
+                simBall.vx *= 0.8;
+            }
+
+            if (simBall.x - simBall.radius < 0) {
+                const impact = Math.abs(simBall.vx);
+                simBall.x = simBall.radius;
+                if (impact > state.MIN_BOUNCE) {
+                    simBall.vx = -simBall.vx * state.SIDE_REST;
+                } else {
+                    simBall.vx = 0;
+                }
+            } else if (simBall.x + simBall.radius > state.width) {
+                const impact = Math.abs(simBall.vx);
+                simBall.x = state.width - simBall.radius;
+                if (impact > state.MIN_BOUNCE) {
+                    simBall.vx = -simBall.vx * state.SIDE_REST;
+                } else {
+                    simBall.vx = 0;
+                }
+            }
+
+            if (simBall.y - simBall.radius < 0) {
+                const impact = Math.abs(simBall.vy);
+                simBall.y = simBall.radius;
+
+                if (impact > state.MIN_BOUNCE) {
+                    simBall.vy = -simBall.vy * state.REST;
+                } else {
+                    simBall.vy = 0;
+                }
+            }
+
+            collideBallLine(simBall, bucketColliders.left, null);
+            collideBallLine(simBall, bucketColliders.right, null);
+            collideBallLine(simBall, bucketColliders.bottom, null);
+
+            simBall.vx *= dragFactor;
+            simBall.vy *= dragFactor;
+
+            if (i % 2 === 0) {
+                points.push({ x: simBall.x, y: simBall.y });
+            }
+
+            if (
+                simBall.x < -simBall.radius * 2 ||
+                simBall.x > state.width + simBall.radius * 2 ||
+                simBall.y > state.height + simBall.radius * 2
+            ) {
+                break;
+            }
+        }
+
+        if (!points.length) {
+            return;
+        }
+
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(191,219,254,0.8)';
+        ctx.beginPath();
+        ctx.moveTo(state.launchOrigin.x, ground - ball.radius - 1);
+        for (let i = 0; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const last = points[points.length - 1];
+        ctx.fillStyle = 'rgba(191,219,254,0.9)';
+        ctx.beginPath();
+        ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    };
+
     const drawAim = () => {
         if (!state.pointer.active) {
             return;
@@ -2098,6 +2509,7 @@
         drawGround();
         drawLaunchPad();
         drawBucket();
+        drawTrajectoryPreview();
         drawTrail();
         drawBall();
         drawAim();
@@ -2134,6 +2546,6 @@
         requestAnimationFrame(tick);
     };
 
-    setStatus('Press, pull, and release the orb to score!', 3200);
+    setStatus('Press, pull, and release the orb to score! Pause for audio + training wheels.', 3200);
     requestAnimationFrame(tick);
 })();

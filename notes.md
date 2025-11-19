@@ -66,3 +66,12 @@ The game is now [**online**](https://ronnie-reagan.github.io/procedural_launcher
 #### Given this input:
 
 I suggest to revise the aiming system to move the ball with the cursor/grab-point aswell as revising the dotted line to be a solid line that gets thinner as it gets longer; like an elastic band; anchored to the ball's center and the corresponding launch point
+
+---
+
+## Direction Snapshot (see `AUDIT_REPORT.md` for detail)
+
+- The fresh audit spells out logic risks, future feature topics, and platform plans from my point of view. Use it as the single source of truth before making sweeping edits.
+- Theme tweaks, playlist swaps, or HUD copy changes are fair game; physics (`updateBall`, collision helpers) should not be touched unless we are ready to regression-test the whole toy.
+- Offline/PWA install work now has a dedicated plan—start by wiring `manifest.webmanifest` and a cache-first service worker exactly as outlined there.
+- Player research questions in the audit file should guide the next feedback round. Write the answers back here once gathered.
