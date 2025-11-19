@@ -915,8 +915,8 @@
 
     function playSuccessSound() {
         const ctx = ensureAudioContext();
-        if (!ctx) return;
-        if (!state.audio.sfxEnabled) return;
+        if (!ctx || ctx === null) return;
+        if (!state || !state.audio || !state.audio.sfxEnabled) return;
 
         const now = ctx.currentTime;
 
