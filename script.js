@@ -95,7 +95,7 @@
         pointerEvents: 'none',
         backdropFilter: 'blur(6px)',
     });
-    instructions.textContent = 'Drag from the orb to aim, then release to arc into the glowing bucket.';
+    instructions.textContent = 'Drag from the orb to aim, release to score. Press R to reset or Pause for settings.';
     root.appendChild(instructions);
 
     const statusBadge = doc.createElement('div');
@@ -117,6 +117,109 @@
     });
     statusBadge.textContent = 'Ready';
     root.appendChild(statusBadge);
+
+    const pauseButton = doc.createElement('button');
+    Object.assign(pauseButton.style, {
+        position: 'absolute',
+        top: '4.2rem',
+        right: '1.5rem',
+        padding: '0.55rem 1.4rem',
+        borderRadius: '999px',
+        border: 'none',
+        background: 'rgba(15, 24, 64, 0.8)',
+        color: '#fff',
+        fontWeight: '600',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        transition: 'background 0.2s ease, transform 0.1s ease',
+    });
+    pauseButton.textContent = 'Pause';
+    pauseButton.addEventListener('pointerenter', () => {
+        pauseButton.style.background = 'rgba(33, 80, 180, 0.85)';
+    });
+    pauseButton.addEventListener('pointerleave', () => {
+        pauseButton.style.background = 'rgba(15, 24, 64, 0.8)';
+    });
+    root.appendChild(pauseButton);
+
+    const nowPlayingBadge = doc.createElement('div');
+    Object.assign(nowPlayingBadge.style, {
+        position: 'absolute',
+        bottom: '4.2rem',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        padding: '0.5rem 1rem',
+        borderRadius: '999px',
+        background: 'rgba(0, 0, 0, 0.5)',
+        color: '#fff',
+        fontSize: '0.85rem',
+        letterSpacing: '0.03em',
+        pointerEvents: 'none',
+        opacity: '0',
+        transition: 'opacity 0.3s ease',
+    });
+    nowPlayingBadge.textContent = '';
+    root.appendChild(nowPlayingBadge);
+
+    const settingsOverlay = doc.createElement('div');
+    Object.assign(settingsOverlay.style, {
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(8px)',
+        opacity: '0',
+        pointerEvents: 'none',
+        transition: 'opacity 0.2s ease',
+    });
+    const settingsPanel = doc.createElement('div');
+    Object.assign(settingsPanel.style, {
+        width: 'min(420px, 90vw)',
+        background: 'rgba(5, 9, 20, 0.9)',
+        borderRadius: '1rem',
+        padding: '2rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1rem',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+        border: '1px solid rgba(255,255,255,0.08)'
+    });
+    settingsOverlay.appendChild(settingsPanel);
+    root.appendChild(settingsOverlay);
+
+    const settingsTitle = doc.createElement('h2');
+    settingsTitle.textContent = 'Menu & Settings';
+    Object.assign(settingsTitle.style, {
+        margin: '0',
+        fontSize: '1.4rem',
+        color: '#fff',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+    });
+    settingsPanel.appendChild(settingsTitle);
+
+    const settingsHint = doc.createElement('p');
+    settingsHint.textContent = 'Adjust audio, reset stats, or resume the round.';
+    Object.assign(settingsHint.style, {
+        margin: '0 0 0.5rem 0',
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: '0.9rem',
+    });
+    settingsPanel.appendChild(settingsHint);
+
+    const settingsButtons = doc.createElement('div');
+    Object.assign(settingsButtons.style, {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.75rem',
+    });
+    settingsPanel.appendChild(settingsButtons);
 
     const randomRange = (min, max) => Math.random() * (max - min) + min;
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -143,6 +246,49 @@
         lifetime: 'launcher_lifetime',
     };
 
+    const preferenceKeys = {
+        music: 'launcher_music_enabled',
+        sfx: 'launcher_sfx_enabled',
+    };
+
+    const calmingTrackFiles = [
+        '01 Kevin MacLeod - Carefree.mp3',
+        '02 Kevin MacLeod - Meditation Impromptu 01.mp3',
+        '03 Kevin MacLeod - Meditation Impromptu 02.mp3',
+        '04 Kevin MacLeod - Meditation Impromptu 03.mp3',
+        '05 Kevin MacLeod - Winter Reflections.mp3',
+        '06 Kevin MacLeod - On the Passing of Time.mp3',
+        '07 Kevin MacLeod - Dream Culture.mp3',
+        '08 Kevin MacLeod - Windswept.mp3',
+        '09 Kevin MacLeod - Inner Light.mp3',
+        '10 Kevin MacLeod - Enchanted Journey.mp3',
+        '11 Kevin MacLeod - Silver Blue Light.mp3',
+        '12 Kevin MacLeod - Autumn Day.mp3',
+        '13 Kevin MacLeod - Smoother Move.mp3',
+        '14 Kevin MacLeod - Sovereign Quarter.mp3',
+        '15 Kevin MacLeod - Calmant.mp3',
+        '16 Kevin MacLeod - Impromptu in Quarter Comma Meantone.mp3',
+        '17 Kevin MacLeod - Danse Morialta.mp3',
+        '18 Kevin MacLeod - Clean Soul.mp3',
+        '19 Kevin MacLeod - Resignation.mp3',
+        '20 Kevin MacLeod - Reaching Out.mp3',
+    ];
+
+    const buildPlaylist = () =>
+        calmingTrackFiles.map((file) => {
+            const withoutIndex = file.replace(/^\d+\s+/, '');
+            const [artistRaw, titleRaw = ''] = withoutIndex.split(' - ');
+            const title = titleRaw.replace(/\.mp3$/i, '').trim();
+            const artist = (artistRaw || 'Unknown').trim();
+            return {
+                src: encodeURI(`music/Calming/${file}`),
+                title,
+                artist,
+            };
+        });
+
+    const playlist = buildPlaylist();
+
     const state = {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -153,6 +299,7 @@
         score: 0,
         best: Number(storage.get(persistenceKeys.best)) || 0,
         lifetime: Number(storage.get(persistenceKeys.lifetime)) || 0,
+        paused: false,
         lastTime: performance.now(),
         statusTimer: 0,
         bucket: {
@@ -190,6 +337,43 @@
         },
         sparkles: [],
         floatingTexts: [],
+        audio: {
+            ctx: null,
+            musicEnabled: storage.get(preferenceKeys.music) !== '0',
+            sfxEnabled: storage.get(preferenceKeys.sfx) !== '0',
+            playlist,
+            audioElement: null,
+            currentTrackIndex: -1,
+            nowPlayingTimer: 0,
+            noiseBuffer: null,
+        },
+    };
+
+    const createSettingsButton = () => {
+        const button = doc.createElement('button');
+        Object.assign(button.style, {
+            padding: '0.9rem 1.1rem',
+            borderRadius: '0.75rem',
+            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'rgba(15, 23, 42, 0.9)',
+            color: '#fff',
+            fontSize: '0.95rem',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            transition: 'background 0.2s ease, transform 0.1s ease',
+        });
+        button.addEventListener('pointerdown', () => {
+            button.style.transform = 'scale(0.97)';
+        });
+        button.addEventListener('pointerup', () => {
+            button.style.transform = 'scale(1)';
+        });
+        button.addEventListener('pointerleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+        settingsButtons.appendChild(button);
+        return button;
     };
 
     const updateScoreboard = () => {
@@ -204,6 +388,314 @@
         statusBadge.textContent = text;
         state.statusTimer = duration;
     };
+
+    function ensureAudioContext() {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) {
+            return null;
+        }
+        if (!state.audio.ctx) {
+            try {
+                state.audio.ctx = new AudioCtx();
+            } catch (err) {
+                return null;
+            }
+        }
+        if (state.audio.ctx.state === 'suspended') {
+            state.audio.ctx.resume();
+        }
+        return state.audio.ctx;
+    }
+
+    function ensureNoiseBuffer(ctx) {
+        if (!ctx) {
+            return null;
+        }
+        if (!state.audio.noiseBuffer) {
+            const duration = 0.3;
+            const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < data.length; i++) {
+                const t = i / data.length;
+                data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3);
+            }
+            state.audio.noiseBuffer = buffer;
+        }
+        return state.audio.noiseBuffer;
+    }
+
+    function playCollisionSound(intensity = 0.5) {
+        if (!state.audio.sfxEnabled) {
+            return;
+        }
+        const ctx = ensureAudioContext();
+        if (!ctx) {
+            return;
+        }
+        const capped = clamp(intensity, 0.12, 1.2);
+        const src = ctx.createBufferSource();
+        src.buffer = ensureNoiseBuffer(ctx);
+
+        const band = ctx.createBiquadFilter();
+        band.type = 'bandpass';
+        band.frequency.value = 1500 + capped * 2200;
+        band.Q.value = 10;
+
+        const noiseGain = ctx.createGain();
+        const now = ctx.currentTime;
+        noiseGain.gain.setValueAtTime(0.001, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.25 * capped, now + 0.01);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+
+        src.connect(band).connect(noiseGain).connect(ctx.destination);
+        src.start();
+        src.stop(now + 0.3);
+
+        const ping = ctx.createOscillator();
+        ping.type = 'sine';
+        ping.frequency.setValueAtTime(1200 + capped * 2000, now);
+        ping.frequency.exponentialRampToValueAtTime(600, now + 0.18);
+        const pingGain = ctx.createGain();
+        pingGain.gain.setValueAtTime(0.001, now);
+        pingGain.gain.exponentialRampToValueAtTime(0.15 * capped, now + 0.005);
+        pingGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+        ping.connect(pingGain).connect(ctx.destination);
+        ping.start();
+        ping.stop(now + 0.3);
+    }
+
+    function showNowPlaying(track) {
+        if (!track) {
+            return;
+        }
+        nowPlayingBadge.textContent = `Now Playing ${track.title} by ${track.artist}`;
+        nowPlayingBadge.style.opacity = '1';
+        state.audio.nowPlayingTimer = 4500;
+    }
+
+    function updateNowPlayingBadge(deltaMs) {
+        if (state.audio.nowPlayingTimer > 0) {
+            state.audio.nowPlayingTimer -= deltaMs;
+            if (state.audio.nowPlayingTimer <= 0) {
+                nowPlayingBadge.style.opacity = '0';
+            }
+        }
+    }
+
+    function ensureMusicElement() {
+        if (!state.audio.playlist.length) {
+            return null;
+        }
+        if (!state.audio.audioElement) {
+            const audio = new Audio();
+            audio.loop = false;
+            audio.volume = 0.45;
+            audio.preload = 'auto';
+            audio.addEventListener('ended', () => {
+                if (state.audio.musicEnabled) {
+                    queueNextTrack();
+                }
+            });
+            state.audio.audioElement = audio;
+        }
+        return state.audio.audioElement;
+    }
+
+    function playTrackAt(index) {
+        if (!state.audio.playlist.length) {
+            return;
+        }
+        const audio = ensureMusicElement();
+        if (!audio) {
+            return;
+        }
+        const normalized = (index + state.audio.playlist.length) % state.audio.playlist.length;
+        const track = state.audio.playlist[normalized];
+        state.audio.currentTrackIndex = normalized;
+        audio.src = track.src;
+        audio.currentTime = 0;
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+            playPromise.then(() => {
+                showNowPlaying(track);
+            }).catch(() => {
+                /* ignore play race */
+            });
+        } else {
+            showNowPlaying(track);
+        }
+    }
+
+    function queueNextTrack() {
+        if (!state.audio.playlist.length) {
+            return;
+        }
+        const nextIndex = state.audio.currentTrackIndex === -1
+            ? Math.floor(Math.random() * state.audio.playlist.length)
+            : (state.audio.currentTrackIndex + 1) % state.audio.playlist.length;
+        playTrackAt(nextIndex);
+    }
+
+    function startMusic() {
+        if (!state.audio.musicEnabled) {
+            return;
+        }
+        ensureAudioContext();
+        const audio = ensureMusicElement();
+        if (!audio) {
+            return;
+        }
+        if (!audio.paused && !audio.ended) {
+            return;
+        }
+        const index = state.audio.currentTrackIndex === -1
+            ? Math.floor(Math.random() * state.audio.playlist.length)
+            : state.audio.currentTrackIndex;
+        playTrackAt(index);
+    }
+
+    function stopMusic() {
+        const audio = state.audio.audioElement;
+        if (!audio) {
+            return;
+        }
+        audio.pause();
+        try {
+            audio.currentTime = 0;
+        } catch (err) {
+            /* ignore */
+        }
+    }
+
+    function setMusicEnabled(enabled) {
+        state.audio.musicEnabled = enabled;
+        storage.set(preferenceKeys.music, enabled ? '1' : '0');
+        if (enabled) {
+            startMusic();
+        } else {
+            state.audio.nowPlayingTimer = 0;
+            nowPlayingBadge.style.opacity = '0';
+            nowPlayingBadge.textContent = '';
+            stopMusic();
+        }
+    }
+
+    function setSfxEnabled(enabled) {
+        state.audio.sfxEnabled = enabled;
+        storage.set(preferenceKeys.sfx, enabled ? '1' : '0');
+    }
+
+    function unlockAudio() {
+        ensureAudioContext();
+        if (state.audio.musicEnabled) {
+            startMusic();
+        }
+    }
+
+    ['pointerdown', 'touchstart'].forEach((eventName) => {
+        window.addEventListener(eventName, unlockAudio, { passive: true });
+    });
+    window.addEventListener('keydown', unlockAudio);
+
+    const toggleVisuals = (button, active) => {
+        button.style.background = active ? 'rgba(37, 99, 235, 0.92)' : 'rgba(15, 23, 42, 0.85)';
+        button.style.borderColor = active ? 'rgba(148, 187, 255, 0.8)' : 'rgba(255,255,255,0.1)';
+    };
+
+    const musicToggleButton = createSettingsButton();
+    const updateMusicToggleButton = () => {
+        toggleVisuals(musicToggleButton, state.audio.musicEnabled);
+        musicToggleButton.textContent = `Music: ${state.audio.musicEnabled ? 'On' : 'Off'}`;
+    };
+    musicToggleButton.addEventListener('click', () => {
+        setMusicEnabled(!state.audio.musicEnabled);
+        updateMusicToggleButton();
+    });
+
+    const sfxToggleButton = createSettingsButton();
+    const updateSfxToggleButton = () => {
+        toggleVisuals(sfxToggleButton, state.audio.sfxEnabled);
+        sfxToggleButton.textContent = `Sound FX: ${state.audio.sfxEnabled ? 'On' : 'Off'}`;
+    };
+    sfxToggleButton.addEventListener('click', () => {
+        setSfxEnabled(!state.audio.sfxEnabled);
+        updateSfxToggleButton();
+    });
+
+    const resetStatsButton = createSettingsButton();
+    resetStatsButton.textContent = 'Reset Stats';
+    resetStatsButton.style.background = 'rgba(190, 50, 80, 0.9)';
+    resetStatsButton.style.borderColor = 'rgba(248, 113, 113, 0.8)';
+    resetStatsButton.addEventListener('click', () => {
+        state.best = 0;
+        state.lifetime = 0;
+        state.score = 0;
+        storage.set(persistenceKeys.best, '0');
+        storage.set(persistenceKeys.lifetime, '0');
+        updateScoreboard();
+        setStatus('Stats reset', 1600);
+        repositionBall();
+    });
+
+    const resumeButton = createSettingsButton();
+    resumeButton.textContent = 'Resume Game';
+    resumeButton.style.background = 'rgba(16, 185, 129, 0.85)';
+    resumeButton.style.borderColor = 'rgba(110, 231, 183, 0.8)';
+
+    updateMusicToggleButton();
+    updateSfxToggleButton();
+
+    const applyPauseVisuals = (isPaused) => {
+        settingsOverlay.style.opacity = isPaused ? '1' : '0';
+        settingsOverlay.style.pointerEvents = isPaused ? 'auto' : 'none';
+        pauseButton.textContent = isPaused ? 'Resume' : 'Pause';
+    };
+
+    const setPaused = (value) => {
+        const nextValue = Boolean(value);
+        if (state.paused === nextValue) {
+            return;
+        }
+        state.paused = nextValue;
+        if (state.paused) {
+            endPointer();
+            statusBadge.textContent = 'Paused';
+            state.statusTimer = 0;
+            applyPauseVisuals(true);
+        } else {
+            state.lastTime = performance.now();
+            applyPauseVisuals(false);
+            setStatus('Game resumed', 900);
+        }
+    };
+
+    pauseButton.addEventListener('click', () => {
+        setPaused(!state.paused);
+    });
+
+    resumeButton.addEventListener('click', () => {
+        setPaused(false);
+    });
+
+    const handleGlobalKeyDown = (event) => {
+        if (event.repeat) {
+            return;
+        }
+        const key = event.key.toLowerCase();
+        if (key === 'r') {
+            if (state.paused) {
+                return;
+            }
+            event.preventDefault();
+            quickFailAttempt();
+        } else if (key === 'escape') {
+            event.preventDefault();
+            setPaused(!state.paused);
+        }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+
+    applyPauseVisuals(false);
 
     const rebuildBackdrop = () => {
         const hue = randomRange(180, 340);
@@ -296,7 +788,7 @@
     }
 
     // --- Generic ball vs "thick line" collider ---
-    function collideBallLine(ball, seg) {
+    function collideBallLine(ball, seg, onImpact) {
         const vx = seg.x2 - seg.x1;
         const vy = seg.y2 - seg.y1;
         const wx = ball.x - seg.x1;
@@ -330,6 +822,9 @@
                 ball.vy -= 1.6 * dot * ny;
                 ball.vx *= 0.85;
                 ball.vy *= 0.85;
+                if (onImpact) {
+                    onImpact(Math.abs(dot));
+                }
             }
             return true;
         }
@@ -395,6 +890,9 @@
     };
 
     canvas.addEventListener('pointerdown', (event) => {
+        if (state.paused) {
+            return;
+        }
         if (!state.ball.ready) {
             return;
         }
@@ -414,7 +912,7 @@
     });
 
     canvas.addEventListener('pointermove', (event) => {
-        if (!state.pointer.active) {
+        if (!state.pointer.active || state.paused) {
             return;
         }
         const pos = pointerToCanvas(event);
@@ -449,7 +947,7 @@
     };
 
     canvas.addEventListener('pointerup', (event) => {
-        if (!state.pointer.active) {
+        if (!state.pointer.active || state.paused) {
             return;
         }
         const launched = launchBall();
@@ -520,6 +1018,12 @@
         repositionBall();
     };
 
+    const quickFailAttempt = () => {
+        endPointer();
+        finishAttempt(false);
+        setStatus('Attempt reset', 1000);
+    };
+
     const updateSparkles = (deltaMs) => {
         state.sparkles = state.sparkles.filter((sparkle) => {
             sparkle.life -= deltaMs;
@@ -568,8 +1072,9 @@
         // ground collision
         const ground = state.groundY;
         if (ball.y + ball.radius >= ground) {
+            const impactVelocity = Math.abs(ball.vy);
             ball.y = ground - ball.radius;
-            if (Math.abs(ball.vy) < 1.5) {
+            if (impactVelocity < 1.5) {
                 ball.vy = 0;
                 ball.vx *= 0.7;
                 finishAttempt(false);
@@ -577,27 +1082,37 @@
             }
             ball.vy *= -0.45;
             ball.vx *= 0.8;
+            playCollisionSound(clamp(impactVelocity / 30, 0.2, 1));
         }
 
         // world bounds
         if (ball.x - ball.radius < 0) {
             ball.x = ball.radius;
+            const impact = Math.abs(ball.vx);
             ball.vx *= -0.5;
+            playCollisionSound(clamp(impact / 25, 0.15, 0.8));
         } else if (ball.x + ball.radius > state.width) {
             ball.x = state.width - ball.radius;
+            const impact = Math.abs(ball.vx);
             ball.vx *= -0.5;
+            playCollisionSound(clamp(impact / 25, 0.15, 0.8));
         }
 
         if (ball.y - ball.radius < 0) {
             ball.y = ball.radius;
+            const impact = Math.abs(ball.vy);
             ball.vy *= -0.45;
+            playCollisionSound(clamp(impact / 25, 0.1, 0.6));
         }
 
         // bucket wall collisions (realistic basketball: can bounce off and still score later)
         const colliders = getBucketColliders();
-        collideBallLine(ball, colliders.left);
-        collideBallLine(ball, colliders.right);
-        collideBallLine(ball, colliders.bottom);
+        const bucketImpactSound = (impact) => {
+            playCollisionSound(clamp(impact / 35, 0.2, 0.9));
+        };
+        collideBallLine(ball, colliders.left, bucketImpactSound);
+        collideBallLine(ball, colliders.right, bucketImpactSound);
+        collideBallLine(ball, colliders.bottom, bucketImpactSound);
 
         // fail if ball escapes the arena entirely
         const failBorder = 120;
@@ -846,6 +1361,12 @@
             if (state.statusTimer <= 0) {
                 statusBadge.textContent = '';
             }
+        }
+
+        updateNowPlayingBadge(deltaMs);
+
+        if (state.paused) {
+            return;
         }
 
         updateSparkles(deltaMs);
