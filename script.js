@@ -103,6 +103,9 @@
 
     const readVolumePref = (key, fallback) => {
         const stored = storage.get(key);
+        if (stored === null) {
+            return fallback;
+        }
         const parsed = Number(stored);
         if (Number.isFinite(parsed)) {
             return clamp(parsed, 0, 1);
@@ -919,6 +922,8 @@
         const ctx = ensureAudioContext();
         if (!ctx || ctx === null) return;
         if (!state || !state.audio || !state.audio.sfxEnabled) return;
+        const volume = clamp(state.audio.sfxVolume ?? 0, 0, 1);
+        if (volume <= 0) return;
 
         const now = ctx.currentTime;
 
@@ -928,9 +933,10 @@
             osc.type = "sine";
 
             const gain = ctx.createGain();
-            gain.gain.setValueAtTime(0.001 * (state.audio.sfxVolume / 1), start);
-            gain.gain.exponentialRampToValueAtTime(0.2 * (state.audio.sfxVolume / 1), start + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.0001 * (state.audio.sfxVolume / 1), start + 0.20);
+            const amp = Math.max(volume, 0.0001); // avoid zero to keep exponential ramps valid
+            gain.gain.setValueAtTime(0.001 * amp, start);
+            gain.gain.exponentialRampToValueAtTime(0.2 * amp, start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001 * amp, start + 0.20);
 
             osc.frequency.setValueAtTime(freq, start);
             osc.connect(gain).connect(ctx.destination);
