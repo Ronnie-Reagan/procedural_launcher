@@ -456,7 +456,7 @@
     // ------------------------------------
     // High-order glass ping generator
     // ------------------------------------
-    function createGlassPing(ctx, freq, time, strength = 1) {
+    function createGlassPing(ctx, freq, time, strength = 0.2) {
         const osc = ctx.createOscillator();
         osc.type = "sine";
 
@@ -494,7 +494,7 @@
 
         const band = ctx.createBiquadFilter();
         band.type = 'bandpass';
-        band.frequency.value = 8000;     // glass-like HF crackle
+        band.frequency.value = 69000;     // glass-like HF crackle
         band.Q.value = 12;
 
         const noiseGain = ctx.createGain();
@@ -510,7 +510,7 @@
         // ------------------------------------------------
         // GLASS RESONANT PINGS (high-order function usage)
         // ------------------------------------------------
-        const base = 4000 + capped * 2500;  // intensity shifts frequencies higher
+        const base = 2000 + capped * 10;  // intensity shifts frequencies higher
 
         createGlassPing(ctx, base, now, capped);
         createGlassPing(ctx, base * 1.37, now, capped * 0.9);
