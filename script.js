@@ -47,6 +47,10 @@
     root.appendChild(canvas);
     const ctx = canvas.getContext('2d');
 
+    canvas.addEventListener('pointerdown', () => {
+        unlockAudio();
+    }, { once: true });
+
     const randomRange = (min, max) => Math.random() * (max - min) + min;
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -852,8 +856,6 @@
     licenseLine.appendChild(licenseLink);
     licenseLine.appendChild(doc.createTextNode('.'));
     creditsSection.appendChild(licenseLine);
-
-
 
     const updateScoreboard = () => {
         streakValue.textContent = state.score.toString();
