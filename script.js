@@ -926,9 +926,9 @@
             osc.type = "sine";
 
             const gain = ctx.createGain();
-            gain.gain.setValueAtTime(0.001, start);
-            gain.gain.exponentialRampToValueAtTime(0.2, start + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.20);
+            gain.gain.setValueAtTime(0.001 * (state.audio.sfxVolume / 1), start);
+            gain.gain.exponentialRampToValueAtTime(0.2 * (state.audio.sfxVolume / 1), start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001 * (state.audio.sfxVolume / 1), start + 0.20);
 
             osc.frequency.setValueAtTime(freq, start);
             osc.connect(gain).connect(ctx.destination);
