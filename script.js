@@ -1410,7 +1410,7 @@
         return { x, y };
     };
 
-    const getMaxDragDistance = () => Math.min(state.width, state.height) * 0.45;
+    const getMaxDragDistance = () => state.height - state.groundY - state.ball.radius;
 
     const updateDraggedBallPosition = (x, y) => {
         const anchorX = state.launchOrigin.x;
