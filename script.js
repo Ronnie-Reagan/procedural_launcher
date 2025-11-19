@@ -126,7 +126,7 @@
 
     const playlist = buildPlaylist();
 
-        const state = {
+    const state = {
         width: window.innerWidth,
         height: window.innerHeight,
         groundY: 0,
@@ -134,6 +134,10 @@
         gravity: 0.55,
         airDrag: 0.994,
         uiScale: 1,
+        REST: 0.45,
+        SIDE_REST: 0.50,
+        MIN_BOUNCE: 0.15,
+
         score: 0,
         best: Number(storage.get(persistenceKeys.best)) || 0,
         lifetime: Number(storage.get(persistenceKeys.lifetime)) || 0,
@@ -268,7 +272,7 @@
         wrapper.appendChild(slider);
         return wrapper;
     };
-    
+
     const hud = doc.createElement('div');
     Object.assign(hud.style, {
         position: 'absolute',
@@ -769,7 +773,7 @@
         statusBadge.style.transform = `scale(${scale})`;
         pauseButton.style.transform = `scale(${scale})`;
         instructions.style.transform = `translate(-50%, 0) scale(${scale})`;
-        nowPlayingBadge.style.transform = `translate(-50%, 0) scale(${scale})`;
+        nowPlayingBadge.style.transform = `translate(-60%, 0) scale(${scale})`;
     };
 
     const setStatus = (text, duration = 2000) => {
@@ -844,67 +848,176 @@
     // ------------------------------------
     // High-order glass ping generator
     // ------------------------------------
-    function createGlassPing(ctx, freq, time, strength = 0.2) {
+    function createGlassPing(ctx, freq, time, strength = 1) {
+        // Clamp requested freq to Web Audio limits
+        const minF = 20;
+        const maxF = 24000;
+        const f0 = Math.max(minF, Math.min(maxF, freq));
+        const f1 = Math.max(minF, Math.min(maxF, freq * 1.08));
+
+        const gain = ctx.createGain();
         const osc = ctx.createOscillator();
         osc.type = "sine";
 
-        osc.frequency.setValueAtTime(freq, time);
-        osc.frequency.exponentialRampToValueAtTime(freq * 1.4, time + 0.015);
+        osc.frequency.setValueAtTime(f0, time);
+        osc.frequency.linearRampToValueAtTime(f1, time + 0.008);
 
-        const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.001, time);
-        gain.gain.exponentialRampToValueAtTime(0.2 * strength, time + 0.002);
-        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+        gain.gain.setValueAtTime(0.0001, time);
+        gain.gain.exponentialRampToValueAtTime(0.18 * strength, time + 0.0015);
+        gain.gain.exponentialRampToValueAtTime(0.012 * strength, time + 0.035);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.09);
 
         osc.connect(gain).connect(ctx.destination);
         osc.start(time);
-        osc.stop(time + 0.06);
+        osc.stop(time + 0.12);
     }
+
+
+    function createGlassCrack(ctx, time, strength = 1) {
+        const src = ctx.createBufferSource();
+        src.buffer = ensureNoiseBuffer(ctx);
+
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 6000;
+
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, time);
+        g.gain.exponentialRampToValueAtTime(0.15 * strength, time + 0.0005);
+        g.gain.exponentialRampToValueAtTime(0.0001, time + 0.003);
+
+        src.connect(hp).connect(g).connect(ctx.destination);
+        src.start(time);
+        src.stop(time + 0.0035);
+    }
+
 
 
     // ------------------------------------
     // Main collision sound
     // ------------------------------------
     function playCollisionSound(intensity = 0.5) {
-        if (!state.audio.sfxEnabled) {
-            return;
-        }
+        if (!state.audio.sfxEnabled) return;
 
         const ctx = ensureAudioContext();
-        if (!ctx) {
-            return;
-        }
+        if (!ctx) return;
 
         const dynamicIntensity = clamp(intensity, 0.12, 1.2);
         const amplitude = dynamicIntensity * state.audio.sfxVolume;
-        if (amplitude <= 0.01) {
-            return;
-        }
+        if (amplitude <= 0.01) return;
+
         const now = ctx.currentTime;
 
+        // Base bandpass noise (unchanged)
         const src = ctx.createBufferSource();
         src.buffer = ensureNoiseBuffer(ctx);
 
         const band = ctx.createBiquadFilter();
         band.type = 'bandpass';
-        band.frequency.value = 2600 + dynamicIntensity * 3200;
-        band.Q.value = 10;
+        band.frequency.value = 380 + dynamicIntensity * 70;
+        band.Q.value = 9;
 
         const noiseGain = ctx.createGain();
         noiseGain.gain.setValueAtTime(0.0001, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.2 * amplitude, now + 0.004);
-        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+        noiseGain.gain.exponentialRampToValueAtTime(0.18 * amplitude, now + 0.003);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
 
         src.connect(band).connect(noiseGain).connect(ctx.destination);
         src.start(now);
-        src.stop(now + 0.18);
+        src.stop(now + 0.14);
 
-        const base = 1600 + dynamicIntensity * 1600;
-        createGlassPing(ctx, base * 0.95, now, amplitude * 0.9);
-        createGlassPing(ctx, base * 1.32, now, amplitude * 0.7);
-        createGlassPing(ctx, base * 1.9, now + 0.015, amplitude * 0.55);
-        createGlassPing(ctx, base * 2.7, now + 0.03, amplitude * 0.45);
+        // --- Add crack transient ---
+        createGlassCrack(ctx, now, amplitude * 1.3);
+
+        // --- Modal cluster (real glass partials) ---
+        const base = 7200 + dynamicIntensity * 180;
+
+        const MODES = [1.00, 1.37, 2.10, 2.92, 4.15];
+
+        for (let i = 0; i < MODES.length; i++) {
+            const t = now + i * 0.006;       // tiny staggering
+            const s = amplitude * (0.9 - i * 0.13); // decreasing strengths
+            createGlassPing(ctx, base * MODES[i], t, s);
+        }
     }
+
+    function playLaunchSound(launchSpeed = 1) {
+        if (!state.audio.sfxEnabled) return;
+
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+
+        const now = ctx.currentTime;
+
+        // Normalize + clamp speed → (0.1 to 1.3)
+        const speed = clamp(launchSpeed / 1400, 0.1, 1.3);
+        const amplitude = speed * state.audio.sfxVolume;
+
+        if (amplitude < 0.01) return;
+
+        // ------------------------------------
+        // 1. Soft crack (lighter than collision)
+        // ------------------------------------
+        {
+            const src = ctx.createBufferSource();
+            src.buffer = ensureNoiseBuffer(ctx);
+
+            const hp = ctx.createBiquadFilter();
+            hp.type = "highpass";
+            hp.frequency.value = 4500 + speed * 2000;
+
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.exponentialRampToValueAtTime(0.08 * amplitude, now + 0.0004);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 0.0023);
+
+            src.connect(hp).connect(g).connect(ctx.destination);
+            src.start(now);
+            src.stop(now + 0.0025);
+        }
+
+        // ------------------------------------
+        // 2. Playful 2-step chirp (launch personality)
+        // ------------------------------------
+        const chirp = (freq, t) => {
+            const osc = ctx.createOscillator();
+            osc.type = "sine";
+
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(0.22 * amplitude, t + 0.006);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+
+            // subtle bend upward
+            osc.frequency.setValueAtTime(freq, t);
+            osc.frequency.linearRampToValueAtTime(freq * 1.05, t + 0.008);
+
+            osc.connect(g).connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.1);
+        };
+
+        const baseChirp = 350 + speed * 250;
+        chirp(baseChirp, now);
+        chirp(baseChirp * 1.35, now + 0.05);  // ascending = playful
+
+
+        // ------------------------------------
+        // 3. Light modal resonance (glass but softer)
+        // ------------------------------------
+        const base = 5500 + speed * 1600;  // lower than impact glass
+
+        // same modal set as your glass collisions
+        const MODES = [1.00, 1.37, 2.10];
+
+        for (let i = 0; i < MODES.length; i++) {
+            const t = now + 0.012 + i * 0.004;
+            const strength = amplitude * (0.4 - i * 0.1); // soft & playful
+
+            createGlassPing(ctx, base * MODES[i], t, strength);
+        }
+    }
+
 
     function showNowPlaying(track) {
         if (!track) {
@@ -1490,9 +1603,9 @@
             return false;
         }
         const maxDrag = getMaxDragDistance();
-        const strength = clamp((distance ) / maxDrag, 0, 1);
-        const maxSpeed = Math.max(state.width, state.height) * 0.03 + 6;
-        const speed = strength * maxSpeed * 1.8;
+        const strength = clamp(distance / maxDrag, 0, 1);
+        const maxSpeed = Math.max(state.width, state.height) * 0.04 + 4;
+        const speed = strength * maxSpeed;
         const inv = 1 / distance;
         state.ball.vx = dx * inv * speed;
         state.ball.vy = dy * inv * speed;
@@ -1514,6 +1627,7 @@
             state.ball.ready = true;
             repositionBall();
         }
+        playLaunchSound(Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vy * state.ball.vy));
         event.preventDefault();
     });
 
@@ -1615,66 +1729,111 @@
 
     const updateBall = (delta) => {
         const ball = state.ball;
-        if (!ball.launched) {
-            return;
-        }
+        if (!ball.launched) return;
 
         const maxStep = 0.45;
         const iterations = Math.max(1, Math.ceil(delta / maxStep));
-        const stepDelta = delta / iterations;
-        const dragFactor = Math.pow(state.airDrag, stepDelta);
+        const dt = delta / iterations;
+
+        const dragFactor = Math.pow(state.airDrag, dt);
+
         const colliders = getBucketColliders();
         const bucketImpactSound = (impact) => {
             playCollisionSound(clamp(impact / 35, 0.2, 0.9));
         };
 
         for (let i = 0; i < iterations; i++) {
-            ball.vy += state.gravity * stepDelta;
-            ball.vx *= dragFactor;
-            ball.vy *= dragFactor;
-            ball.x += ball.vx * stepDelta;
-            ball.y += ball.vy * stepDelta;
 
+            // -----------------------------------------
+            // 1. Forces → integrate velocity
+            // -----------------------------------------
+            ball.vy += state.gravity * dt;
+
+            ball.x += ball.vx * dt;
+            ball.y += ball.vy * dt;
+
+
+            // -----------------------------------------
+            // 2. Ground collision
+            // -----------------------------------------
             const ground = state.groundY;
             if (ball.trail.length > 10) {
-            if (ball.y + ball.radius >= ground) {
-                const impactVelocity = Math.abs(ball.vy);
-                ball.y = ground - ball.radius;
-                if (impactVelocity < 1.5) {
-                    ball.vy = 0;
-                    ball.vx *= 0.7;
-                    finishAttempt(false);
-                    return;
+                if (ball.y + ball.radius >= ground) {
+                    const impact = Math.abs(ball.vy);
+                    ball.y = ground - ball.radius;
+
+                    if (impact < state.MIN_BOUNCE) {
+                        ball.vy = 0;
+                        ball.vx *= 0.7;
+                        finishAttempt(false);
+                        return;
+                    }
+
+                    // vertical reflection
+                    ball.vy = -ball.vy * state.REST;
+
+                    // horizontal damping on ground hit
+                    ball.vx *= 0.8;
+
+                    playCollisionSound(clamp(impact / 30, 0.2, 1));
                 }
-                ball.vy *= -0.45;
-                ball.vx *= 0.8;
-                playCollisionSound(clamp(impactVelocity / 30, 0.2, 1));
             }
-        }
 
+
+            // -----------------------------------------
+            // 3. Left/Right walls
+            // -----------------------------------------
             if (ball.x - ball.radius < 0) {
+                const impact = Math.abs(ball.vx);
                 ball.x = ball.radius;
+
+                if (impact > state.MIN_BOUNCE) {
+                    ball.vx = -ball.vx * state.SIDE_REST;
+                    playCollisionSound(clamp(impact / 25, 0.15, 0.8));
+                } else {
+                    ball.vx = 0;
+                }
+            }
+            else if (ball.x + ball.radius > state.width) {
                 const impact = Math.abs(ball.vx);
-                ball.vx *= -0.5;
-                playCollisionSound(clamp(impact / 25, 0.15, 0.8));
-            } else if (ball.x + ball.radius > state.width) {
                 ball.x = state.width - ball.radius;
-                const impact = Math.abs(ball.vx);
-                ball.vx *= -0.5;
-                playCollisionSound(clamp(impact / 25, 0.15, 0.8));
+
+                if (impact > state.MIN_BOUNCE) {
+                    ball.vx = -ball.vx * state.SIDE_REST;
+                    playCollisionSound(clamp(impact / 25, 0.15, 0.8));
+                } else {
+                    ball.vx = 0;
+                }
             }
 
+
+            // -----------------------------------------
+            // 4. Ceiling
+            // -----------------------------------------
             if (ball.y - ball.radius < 0) {
-                ball.y = ball.radius;
                 const impact = Math.abs(ball.vy);
-                ball.vy *= -0.45;
-                playCollisionSound(clamp(impact / 25, 0.1, 0.6));
+                ball.y = ball.radius;
+
+                if (impact > state.MIN_BOUNCE) {
+                    ball.vy = -ball.vy * state.REST;
+                    playCollisionSound(clamp(impact / 25, 0.1, 0.6));
+                } else {
+                    ball.vy = 0;
+                }
             }
 
+
+            // -----------------------------------------
+            // 5. Bucket line collisions (your function)
+            // -----------------------------------------
             collideBallLine(ball, colliders.left, bucketImpactSound);
             collideBallLine(ball, colliders.right, bucketImpactSound);
             collideBallLine(ball, colliders.bottom, bucketImpactSound);
 
+
+            // -----------------------------------------
+            // 6. Fail borders
+            // -----------------------------------------
             const failBorder = 120;
             if (
                 ball.x < -failBorder ||
@@ -1685,25 +1844,44 @@
                 return;
             }
 
+
+            // -----------------------------------------
+            // 7. Goal detection
+            // -----------------------------------------
             const b = state.bucket;
             const r = ball.radius;
+
             const innerLeft = b.x + b.wall * 0.6 + r * 0.4;
             const innerRight = b.x + b.width - b.wall * 0.6 - r * 0.4;
             const innerTop = b.y + b.wall + r * 0.3;
             const innerBottomGoal = b.y + b.depth - b.wall - r * 0.8;
+
             const inX = ball.x > innerLeft && ball.x < innerRight;
             const inY = ball.y > innerTop && ball.y < innerBottomGoal;
+
             if (ball.vy > 0 && inX && inY) {
                 finishAttempt(true);
                 return;
             }
+
+
+            // -----------------------------------------
+            // 8. Apply drag after all collisions
+            // -----------------------------------------
+            ball.vx *= dragFactor;
+            ball.vy *= dragFactor;
         }
 
+
+        // -----------------------------------------
+        // 9. Trail tracking
+        // -----------------------------------------
         ball.trail.push({ x: ball.x, y: ball.y });
         if (ball.trail.length > 60) {
             ball.trail.shift();
         }
     };
+
 
     const drawBackground = () => {
         const gradient = ctx.createLinearGradient(0, 0, 0, state.height);
