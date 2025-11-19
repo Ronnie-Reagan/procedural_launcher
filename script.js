@@ -424,44 +424,98 @@
         return state.audio.noiseBuffer;
     }
 
-    function playCollisionSound(intensity = 0.5) {
-        if (!state.audio.sfxEnabled) {
-            return;
-        }
+    function playSuccessSound() {
         const ctx = ensureAudioContext();
-        if (!ctx) {
-            return;
-        }
+        if (!ctx) return;
+
+        const now = ctx.currentTime;
+
+        // Utility to make a short pluck-like beep
+        const beep = (freq, start) => {
+            const osc = ctx.createOscillator();
+            osc.type = "sine";
+
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.exponentialRampToValueAtTime(0.2, start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.20);
+
+            osc.frequency.setValueAtTime(freq, start);
+            osc.connect(gain).connect(ctx.destination);
+
+            osc.start(start);
+            osc.stop(start + 0.25);
+        };
+
+        // Three ascending tones
+        beep(600, now + 0.00);
+        beep(850, now + 0.12);
+        beep(1100, now + 0.24);
+    }
+
+    // ------------------------------------
+    // High-order glass ping generator
+    // ------------------------------------
+    function createGlassPing(ctx, freq, time, strength = 1) {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+
+        osc.frequency.setValueAtTime(freq, time);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.4, time + 0.015);
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.001, time);
+        gain.gain.exponentialRampToValueAtTime(0.2 * strength, time + 0.002);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.06);
+    }
+
+
+    // ------------------------------------
+    // Main collision sound
+    // ------------------------------------
+    function playCollisionSound(intensity = 0.5) {
+        if (!state.audio.sfxEnabled) return;
+
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+
         const capped = clamp(intensity, 0.12, 1.2);
+        const now = ctx.currentTime;
+
+        // ------------------------------------------------
+        // NOISE: tiny shard crackle (only HF sparkle)
+        // ------------------------------------------------
         const src = ctx.createBufferSource();
         src.buffer = ensureNoiseBuffer(ctx);
 
         const band = ctx.createBiquadFilter();
         band.type = 'bandpass';
-        band.frequency.value = 1500 + capped * 2200;
-        band.Q.value = 10;
+        band.frequency.value = 8000;     // glass-like HF crackle
+        band.Q.value = 12;
 
         const noiseGain = ctx.createGain();
-        const now = ctx.currentTime;
-        noiseGain.gain.setValueAtTime(0.001, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.25 * capped, now + 0.01);
-        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+        noiseGain.gain.setValueAtTime(0.0001, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.15 * capped, now + 0.003);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
 
         src.connect(band).connect(noiseGain).connect(ctx.destination);
-        src.start();
-        src.stop(now + 0.3);
+        src.start(now);
+        src.stop(now + 0.07);
 
-        const ping = ctx.createOscillator();
-        ping.type = 'sine';
-        ping.frequency.setValueAtTime(1200 + capped * 2000, now);
-        ping.frequency.exponentialRampToValueAtTime(600, now + 0.18);
-        const pingGain = ctx.createGain();
-        pingGain.gain.setValueAtTime(0.001, now);
-        pingGain.gain.exponentialRampToValueAtTime(0.15 * capped, now + 0.005);
-        pingGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
-        ping.connect(pingGain).connect(ctx.destination);
-        ping.start();
-        ping.stop(now + 0.3);
+
+        // ------------------------------------------------
+        // GLASS RESONANT PINGS (high-order function usage)
+        // ------------------------------------------------
+        const base = 4000 + capped * 2500;  // intensity shifts frequencies higher
+
+        createGlassPing(ctx, base, now, capped);
+        createGlassPing(ctx, base * 1.37, now, capped * 0.9);
+        createGlassPing(ctx, base * 2.58, now, capped * 0.6);
+        createGlassPing(ctx, base * 3.9, now, capped * 0.4);
     }
 
     function showNowPlaying(track) {
@@ -997,6 +1051,7 @@
             }
             storage.set(persistenceKeys.lifetime, String(state.lifetime));
             updateScoreboard();
+            playSuccessSound();
             spawnSparkles(
                 state.bucket.x + state.bucket.width / 2,
                 state.bucket.y + state.bucket.depth / 2,
